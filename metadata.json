@@ -1,0 +1,7 @@
+{
+  "name": "Yeild Ai",
+  "description": "Smart farming application for the AI500 Hackathon. Integrates drone telemetry, field measurement, and AI-powered resource calculation for Uzbekistan farmers.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
