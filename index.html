@@ -3,24 +3,56 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AgroUz SmartFarm</title>
+    <title>Yield AI SmartFarm</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              yield: {
+                50: '#f2fcf5', // Very light green for light mode bg
+                100: '#e1f7e7',
+                500: '#22c55e', // Standard green
+                600: '#16a34a', // Primary buttons
+                700: '#15803d',
+                800: '#166534', // Text
+                900: '#14532d', // Dark text
+                950: '#052e16', // Dark mode background (Deep Green)
+              },
+              dark: {
+                bg: '#022c22', // Custom Deep Green for Dark Mode Background
+                card: '#064e3b', // Lighter Deep Green for Cards
+                border: '#065f46', // Border color in dark mode
+                text: '#ecfdf5', // Text color in dark mode
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
     <style>
       body {
         font-family: 'Inter', sans-serif;
-        background-color: #f3f4f6;
       }
       /* Custom scrollbar for better aesthetics */
       ::-webkit-scrollbar {
         width: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #f1f1f1; 
+        background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
         background: #cbd5e1; 
         border-radius: 4px;
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #065f46; 
       }
       ::-webkit-scrollbar-thumb:hover {
         background: #94a3b8; 

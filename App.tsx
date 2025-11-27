@@ -6,9 +6,31 @@ import { AgroCalculator } from './components/AgroCalculator';
 import { DroneConnection } from './components/DroneConnection';
 import { MobileNavigation } from './components/MobileNavigation';
 import { ViewState, Field } from './types';
-import { Map, TrendingUp, Calendar, AlertTriangle, Globe } from 'lucide-react';
+import { Map, TrendingUp, Calendar, AlertTriangle, Globe, Moon, Sun } from 'lucide-react';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { Language } from './utils/translations';
+
+// Duplicate Logo Component for Header usage
+const YieldAILogoSmall = ({ className }: { className?: string }) => (
+  <svg 
+    viewBox="0 0 100 100" 
+    fill="none" 
+    xmlns="http://www.w3.org/2000/svg" 
+    className={className}
+  >
+    <circle cx="20" cy="20" r="12" stroke="currentColor" strokeWidth="8" />
+    <circle cx="80" cy="20" r="12" stroke="currentColor" strokeWidth="8" />
+    <circle cx="20" cy="65" r="12" stroke="currentColor" strokeWidth="8" />
+    <circle cx="80" cy="65" r="12" stroke="currentColor" strokeWidth="8" />
+    <rect x="35" y="30" width="30" height="25" rx="4" fill="currentColor" />
+    <path d="M28 26 L38 33" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+    <path d="M72 26 L62 33" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+    <path d="M28 59 L38 52" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+    <path d="M72 59 L62 52" stroke="currentColor" strokeWidth="6" strokeLinecap="round" />
+    <path d="M20 85 C 35 80, 45 95, 80 85" stroke="#EAB308" strokeWidth="6" strokeLinecap="round" className="text-yellow-500 opacity-80" />
+  </svg>
+);
 
 const Dashboard: React.FC<{ 
   fields: Field[], 
@@ -20,52 +42,52 @@ const Dashboard: React.FC<{
   return (
     <div className="space-y-6 pb-24 md:pb-0">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
-            <div className="bg-blue-100 p-3 rounded-xl text-blue-600">
+         <div className="bg-white dark:bg-dark-card p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-dark-border flex items-center gap-4 transition-colors">
+            <div className="bg-yield-100 dark:bg-yield-900 p-3 rounded-xl text-yield-600 dark:text-yield-100">
                <Map size={24} />
             </div>
             <div>
-               <div className="text-slate-500 text-sm font-medium">{t.dashboard.totalFields}</div>
-               <div className="text-2xl font-bold text-slate-800">{fields.length}</div>
+               <div className="text-yield-800 dark:text-gray-400 text-sm font-medium">{t.dashboard.totalFields}</div>
+               <div className="text-2xl font-bold text-yield-900 dark:text-white">{fields.length}</div>
             </div>
          </div>
-         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
-            <div className="bg-green-100 p-3 rounded-xl text-green-600">
+         <div className="bg-white dark:bg-dark-card p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-dark-border flex items-center gap-4 transition-colors">
+            <div className="bg-yield-100 dark:bg-yield-900 p-3 rounded-xl text-yield-600 dark:text-yield-100">
                <TrendingUp size={24} />
             </div>
             <div>
-               <div className="text-slate-500 text-sm font-medium">{t.dashboard.totalArea}</div>
-               <div className="text-2xl font-bold text-slate-800">{totalArea.toFixed(2)} га</div>
+               <div className="text-yield-800 dark:text-gray-400 text-sm font-medium">{t.dashboard.totalArea}</div>
+               <div className="text-2xl font-bold text-yield-900 dark:text-white">{totalArea.toFixed(2)} га</div>
             </div>
          </div>
-         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
-            <div className="bg-purple-100 p-3 rounded-xl text-purple-600">
+         <div className="bg-white dark:bg-dark-card p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-dark-border flex items-center gap-4 transition-colors">
+            <div className="bg-yield-100 dark:bg-yield-900 p-3 rounded-xl text-yield-600 dark:text-yield-100">
                <Calendar size={24} />
             </div>
             <div>
-               <div className="text-slate-500 text-sm font-medium">{t.dashboard.season}</div>
-               <div className="text-2xl font-bold text-slate-800">2025</div>
+               <div className="text-yield-800 dark:text-gray-400 text-sm font-medium">{t.dashboard.season}</div>
+               <div className="text-2xl font-bold text-yield-900 dark:text-white">2025</div>
             </div>
          </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <h3 className="font-bold text-lg mb-4 text-slate-800">{t.dashboard.activeFields}</h3>
+         <div className="bg-white dark:bg-dark-card p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-dark-border transition-colors">
+            <h3 className="font-bold text-lg mb-4 text-yield-900 dark:text-white">{t.dashboard.activeFields}</h3>
             {fields.length === 0 ? (
-              <div className="text-center py-10 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+              <div className="text-center py-10 text-yield-800 dark:text-gray-400 bg-yield-50 dark:bg-yield-950/30 rounded-xl border border-dashed border-yield-200 dark:border-dark-border">
                  <p>{t.dashboard.noFields}</p>
-                 <button onClick={() => setView('MAPPING')} className="text-green-600 font-medium mt-2 hover:underline">{t.dashboard.addField}</button>
+                 <button onClick={() => setView('MAPPING')} className="text-yield-600 font-medium mt-2 hover:underline">{t.dashboard.addField}</button>
               </div>
             ) : (
               <div className="space-y-3">
                  {fields.map(field => (
-                    <div key={field.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-100">
+                    <div key={field.id} className="flex justify-between items-center p-4 bg-yield-50 dark:bg-yield-900/20 rounded-xl border border-yield-100 dark:border-dark-border">
                        <div>
-                          <div className="font-bold text-slate-800">{field.name}</div>
-                          <div className="text-xs text-slate-500">{t.dashboard.dateAdded}: {field.plantingDate}</div>
+                          <div className="font-bold text-yield-900 dark:text-white">{field.name}</div>
+                          <div className="text-xs text-yield-600 dark:text-gray-400">{t.dashboard.dateAdded}: {field.plantingDate}</div>
                        </div>
-                       <div className="px-3 py-1 bg-green-100 text-green-700 rounded-lg text-sm font-bold">
+                       <div className="px-3 py-1 bg-yield-100 dark:bg-yield-800 text-yield-700 dark:text-yield-100 rounded-lg text-sm font-bold">
                           {field.areaHa} га
                        </div>
                     </div>
@@ -74,22 +96,22 @@ const Dashboard: React.FC<{
             )}
          </div>
 
-         <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 rounded-2xl shadow-lg">
+         <div className="bg-gradient-to-br from-yield-900 to-yield-800 dark:from-black dark:to-yield-950 text-white p-6 rounded-2xl shadow-lg border border-transparent dark:border-dark-border">
             <h3 className="font-bold text-lg mb-4">{t.dashboard.quickActions}</h3>
             <div className="grid grid-cols-2 gap-4">
-               <button onClick={() => setView('DRONE_CONTROL')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded-xl text-left transition-colors">
-                  <div className="text-blue-400 mb-2 font-bold">{t.dashboard.connectDrone}</div>
-                  <p className="text-xs text-slate-300">{t.dashboard.connectDroneDesc}</p>
+               <button onClick={() => setView('DRONE_CONTROL')} className="bg-white/10 hover:bg-white/20 p-4 rounded-xl text-left transition-colors backdrop-blur-sm">
+                  <div className="text-blue-200 mb-2 font-bold">{t.dashboard.connectDrone}</div>
+                  <p className="text-xs text-blue-100/70">{t.dashboard.connectDroneDesc}</p>
                </button>
-               <button onClick={() => setView('CALCULATOR')} className="bg-slate-700 hover:bg-slate-600 p-4 rounded-xl text-left transition-colors">
-                  <div className="text-green-400 mb-2 font-bold">{t.dashboard.calcFertilizer}</div>
-                  <p className="text-xs text-slate-300">{t.dashboard.calcFertilizerDesc}</p>
+               <button onClick={() => setView('CALCULATOR')} className="bg-white/10 hover:bg-white/20 p-4 rounded-xl text-left transition-colors backdrop-blur-sm">
+                  <div className="text-green-300 mb-2 font-bold">{t.dashboard.calcFertilizer}</div>
+                  <p className="text-xs text-green-100/70">{t.dashboard.calcFertilizerDesc}</p>
                </button>
             </div>
-            <div className="mt-6 p-4 bg-slate-800/50 rounded-xl border border-slate-700 flex items-start gap-3">
-               <AlertTriangle className="text-yellow-500 shrink-0" size={20} />
-               <div className="text-sm text-slate-300">
-                  <span className="text-yellow-500 font-bold block mb-1">{t.dashboard.weatherWarning}</span>
+            <div className="mt-6 p-4 bg-black/20 rounded-xl border border-white/10 flex items-start gap-3">
+               <AlertTriangle className="text-yellow-400 shrink-0" size={20} />
+               <div className="text-sm text-gray-200">
+                  <span className="text-yellow-400 font-bold block mb-1">{t.dashboard.weatherWarning}</span>
                   {t.dashboard.weatherDesc}
                </div>
             </div>
@@ -103,6 +125,7 @@ const MainLayout: React.FC = () => {
   const [currentView, setView] = useState<ViewState>('DASHBOARD');
   const [fields, setFields] = useState<Field[]>([]);
   const { language, setLanguage, t } = useLanguage();
+  const { isDarkMode, toggleTheme } = useTheme();
 
   const handleSaveField = (field: Field) => {
     setFields([...fields, field]);
@@ -111,38 +134,52 @@ const MainLayout: React.FC = () => {
   const totalArea = fields.reduce((acc, field) => acc + field.areaHa, 0);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-100 font-sans">
+    <div className="flex h-screen overflow-hidden bg-yield-50 dark:bg-dark-bg font-sans transition-colors duration-300">
       <Sidebar currentView={currentView} setView={setView} />
       
       <main className="flex-1 overflow-y-auto w-full">
         <div className="p-4 md:p-8 pb-24 md:pb-8">
           <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <h2 className="text-2xl md:text-3xl font-bold text-slate-800">
-                {currentView === 'DASHBOARD' && t.dashboard.title}
-                {currentView === 'MAPPING' && t.nav.mapping}
-                {currentView === 'CALCULATOR' && t.nav.calculator}
-                {currentView === 'DRONE_CONTROL' && t.nav.drone}
-              </h2>
-              <p className="text-slate-500 text-sm md:text-base">{t.dashboard.subtitle}</p>
+            <div className="flex items-center gap-3">
+              <div className="md:hidden bg-yield-600 p-2 rounded-lg text-white">
+                <YieldAILogoSmall className="w-8 h-8" />
+              </div>
+              <div>
+                <h2 className="text-2xl md:text-3xl font-bold text-yield-900 dark:text-white leading-tight">
+                  {currentView === 'DASHBOARD' && t.dashboard.title}
+                  {currentView === 'MAPPING' && t.nav.mapping}
+                  {currentView === 'CALCULATOR' && t.nav.calculator}
+                  {currentView === 'DRONE_CONTROL' && t.nav.drone}
+                </h2>
+                <p className="text-yield-600 dark:text-gray-400 text-sm md:text-base">{t.dashboard.subtitle}</p>
+              </div>
             </div>
             
             <div className="flex items-center gap-2 self-end md:self-auto">
-              <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg shadow-sm border border-slate-200">
-                 <Globe size={16} className="text-slate-400" />
+              {/* Theme Toggle */}
+              <button 
+                onClick={toggleTheme}
+                className="p-2 bg-white dark:bg-dark-card text-yield-600 dark:text-yield-100 rounded-lg shadow-sm border border-slate-200 dark:border-dark-border hover:bg-slate-50 dark:hover:bg-yield-900 transition-colors"
+                aria-label="Toggle Dark Mode"
+              >
+                {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+              </button>
+
+              <div className="flex items-center gap-2 bg-white dark:bg-dark-card px-3 py-2 rounded-lg shadow-sm border border-slate-200 dark:border-dark-border">
+                 <Globe size={16} className="text-yield-400" />
                  <select 
                    value={language}
                    onChange={(e) => setLanguage(e.target.value as Language)}
-                   className="bg-transparent text-sm font-medium text-slate-700 outline-none cursor-pointer"
+                   className="bg-transparent text-sm font-medium text-yield-700 dark:text-gray-200 outline-none cursor-pointer"
                  >
-                   <option value="ru">Русский</option>
-                   <option value="uz">O'zbek</option>
-                   <option value="en">English</option>
+                   <option value="ru" className="text-black">Русский</option>
+                   <option value="uz" className="text-black">O'zbek</option>
+                   <option value="en" className="text-black">English</option>
                  </select>
               </div>
-              <div className="hidden md:flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-sm font-medium text-slate-600">{t.common.server}</span>
+              <div className="hidden md:flex items-center gap-2 bg-white dark:bg-dark-card px-4 py-2 rounded-full shadow-sm border border-slate-200 dark:border-dark-border">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-sm font-medium text-yield-600 dark:text-gray-300">{t.common.server}</span>
               </div>
             </div>
           </header>
@@ -172,9 +209,11 @@ const MainLayout: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <LanguageProvider>
-      <MainLayout />
-    </LanguageProvider>
+    <ThemeProvider>
+      <LanguageProvider>
+        <MainLayout />
+      </LanguageProvider>
+    </ThemeProvider>
   );
 };
 

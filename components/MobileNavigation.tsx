@@ -20,7 +20,7 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({ currentView,
   ];
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 pb-safe pt-2 z-50 shadow-lg">
+    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-dark-card border-t border-slate-200 dark:border-dark-border px-2 pb-safe pt-2 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
       <div className="flex justify-around items-end h-16 pb-2">
         {navItems.map((item) => (
           <button
@@ -28,11 +28,11 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({ currentView,
             onClick={() => setView(item.id)}
             className={`flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${
               currentView === item.id
-                ? 'text-green-600'
-                : 'text-slate-400 hover:text-slate-600'
+                ? 'text-yield-600 dark:text-yield-400'
+                : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
             }`}
           >
-            <div className={`p-1 rounded-lg ${currentView === item.id ? 'bg-green-50' : ''}`}>
+            <div className={`p-1 rounded-lg transition-colors duration-300 ${currentView === item.id ? 'bg-yield-50 dark:bg-yield-900/30' : ''}`}>
               {item.icon}
             </div>
             <span className="text-[10px] font-medium leading-none">{item.label}</span>
