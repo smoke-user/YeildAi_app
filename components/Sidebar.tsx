@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, Map, Calculator, Settings } from 'lucide-react';
+import { LayoutDashboard, Map, Calculator, Settings, MessageSquareText } from 'lucide-react';
 import { ViewState } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -45,6 +45,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
     { id: 'DASHBOARD', label: t.nav.dashboard, icon: <LayoutDashboard size={20} /> },
     { id: 'MAPPING', label: t.nav.mapping, icon: <Map size={20} /> },
     { id: 'CALCULATOR', label: t.nav.calculator, icon: <Calculator size={20} /> },
+    { id: 'AI_CHAT', label: t.nav.chat, icon: <MessageSquareText size={20} /> },
     { id: 'DRONE_CONTROL', label: t.nav.drone, icon: <Settings size={20} /> },
   ];
 

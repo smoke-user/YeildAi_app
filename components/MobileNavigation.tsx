@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, Map, Calculator, Settings } from 'lucide-react';
+import { LayoutDashboard, Map, Calculator, Settings, MessageSquareText } from 'lucide-react';
 import { ViewState } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -16,6 +16,7 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({ currentView,
     { id: 'DASHBOARD', label: t.nav.dashboard, icon: <LayoutDashboard size={24} /> },
     { id: 'MAPPING', label: t.nav.mapping, icon: <Map size={24} /> },
     { id: 'CALCULATOR', label: t.nav.calculator, icon: <Calculator size={24} /> },
+    { id: 'AI_CHAT', label: "AI Chat", icon: <MessageSquareText size={24} /> },
     { id: 'DRONE_CONTROL', label: t.nav.drone, icon: <Settings size={24} /> },
   ];
 

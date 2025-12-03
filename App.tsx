@@ -1,13 +1,13 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { FieldMapping } from './components/FieldMapping';
 import { AgroCalculator } from './components/AgroCalculator';
 import { DroneConnection } from './components/DroneConnection';
+import { AIChat } from './components/AIChat';
 import { MobileNavigation } from './components/MobileNavigation';
 import { ViewState, Field } from './types';
-import { Map, TrendingUp, Calendar, AlertTriangle, Globe, Moon, Sun } from 'lucide-react';
-import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
+import { Map, TrendingUp, Calendar, AlertTriangle, Globe, Moon, Sun, Trash2, FileText } from 'lucide-react';
+import { useLanguage } from './contexts/LanguageContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { Language } from './utils/translations';
 
@@ -35,8 +35,9 @@ const YieldAILogoSmall = ({ className }: { className?: string }) => (
 const Dashboard: React.FC<{ 
   fields: Field[], 
   setView: (view: ViewState) => void, 
-  totalArea: number 
-}> = ({ fields, setView, totalArea }) => {
+  totalArea: number,
+  onDeleteField: (id: string) => void
+}> = ({ fields, setView, totalArea, onDeleteField }) => {
   const { t } = useLanguage();
   
   return (
@@ -82,13 +83,34 @@ const Dashboard: React.FC<{
             ) : (
               <div className="space-y-3">
                  {fields.map(field => (
-                    <div key={field.id} className="flex justify-between items-center p-4 bg-yield-50 dark:bg-yield-900/20 rounded-xl border border-yield-100 dark:border-dark-border">
-                       <div>
-                          <div className="font-bold text-yield-900 dark:text-white">{field.name}</div>
+                    <div key={field.id} className="flex justify-between items-start p-4 bg-yield-50 dark:bg-yield-900/20 rounded-xl border border-yield-100 dark:border-dark-border group">
+                       <div className="space-y-1">
+                          <div className="font-bold text-yield-900 dark:text-white flex items-center gap-2">
+                            {field.name}
+                            {field.aiPlan && (
+                              <span className="text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 flex items-center gap-1" title={field.aiPlan.summary}>
+                                <FileText size={10} /> AI Plan
+                              </span>
+                            )}
+                          </div>
                           <div className="text-xs text-yield-600 dark:text-gray-400">{t.dashboard.dateAdded}: {field.plantingDate}</div>
+                          {field.aiPlan && (
+                             <div className="text-xs text-slate-500 dark:text-slate-400 italic max-w-[200px] truncate">
+                               {field.aiPlan.summary}
+                             </div>
+                          )}
                        </div>
-                       <div className="px-3 py-1 bg-yield-100 dark:bg-yield-800 text-yield-700 dark:text-yield-100 rounded-lg text-sm font-bold">
-                          {field.areaHa} га
+                       <div className="flex flex-col items-end gap-2">
+                         <div className="px-3 py-1 bg-yield-100 dark:bg-yield-800 text-yield-700 dark:text-yield-100 rounded-lg text-sm font-bold">
+                            {field.areaHa} га
+                         </div>
+                         <button 
+                            onClick={() => onDeleteField(field.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                            title={t.common.delete}
+                         >
+                           <Trash2 size={16} />
+                         </button>
                        </div>
                     </div>
                  ))}
@@ -121,14 +143,45 @@ const Dashboard: React.FC<{
   );
 };
 
-const MainLayout: React.FC = () => {
+const App: React.FC = () => {
   const [currentView, setView] = useState<ViewState>('DASHBOARD');
-  const [fields, setFields] = useState<Field[]>([]);
+  
+  // Persistent State: Initialize from localStorage
+  const [fields, setFields] = useState<Field[]>(() => {
+    try {
+      const savedFields = localStorage.getItem('yield_ai_fields');
+      return savedFields ? JSON.parse(savedFields) : [];
+    } catch (e) {
+      console.error("Failed to load fields from storage", e);
+      return [];
+    }
+  });
+
   const { language, setLanguage, t } = useLanguage();
   const { isDarkMode, toggleTheme } = useTheme();
 
+  // Save to localStorage whenever fields change
+  useEffect(() => {
+    try {
+      localStorage.setItem('yield_ai_fields', JSON.stringify(fields));
+    } catch (e) {
+      console.error("Failed to save fields", e);
+    }
+  }, [fields]);
+
   const handleSaveField = (field: Field) => {
-    setFields([...fields, field]);
+    setFields(prev => [...prev, field]);
+    setView('DASHBOARD');
+  };
+
+  const handleDeleteField = (id: string) => {
+    if (confirm("Are you sure you want to delete this field?")) {
+      setFields(prev => prev.filter(f => f.id !== id));
+    }
+  };
+
+  const handleUpdateField = (updatedField: Field) => {
+    setFields(prev => prev.map(f => f.id === updatedField.id ? updatedField : f));
   };
 
   const totalArea = fields.reduce((acc, field) => acc + field.areaHa, 0);
@@ -150,6 +203,7 @@ const MainLayout: React.FC = () => {
                   {currentView === 'MAPPING' && t.nav.mapping}
                   {currentView === 'CALCULATOR' && t.nav.calculator}
                   {currentView === 'DRONE_CONTROL' && t.nav.drone}
+                  {currentView === 'AI_CHAT' && t.nav.chat}
                 </h2>
                 <p className="text-yield-600 dark:text-gray-400 text-sm md:text-base">{t.dashboard.subtitle}</p>
               </div>
@@ -185,7 +239,12 @@ const MainLayout: React.FC = () => {
           </header>
 
           {currentView === 'DASHBOARD' && (
-            <Dashboard fields={fields} setView={setView} totalArea={totalArea} />
+            <Dashboard 
+              fields={fields} 
+              setView={setView} 
+              totalArea={totalArea} 
+              onDeleteField={handleDeleteField}
+            />
           )}
 
           {currentView === 'MAPPING' && (
@@ -193,27 +252,21 @@ const MainLayout: React.FC = () => {
           )}
 
           {currentView === 'CALCULATOR' && (
-            <AgroCalculator fields={fields} />
+            <AgroCalculator fields={fields} onUpdateField={handleUpdateField} />
           )}
 
           {currentView === 'DRONE_CONTROL' && (
             <DroneConnection />
+          )}
+
+          {currentView === 'AI_CHAT' && (
+            <AIChat />
           )}
         </div>
       </main>
 
       <MobileNavigation currentView={currentView} setView={setView} />
     </div>
-  );
-};
-
-const App: React.FC = () => {
-  return (
-    <ThemeProvider>
-      <LanguageProvider>
-        <MainLayout />
-      </LanguageProvider>
-    </ThemeProvider>
   );
 };
 

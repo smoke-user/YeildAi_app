@@ -1,18 +1,21 @@
 
 import React, { useState } from 'react';
-import { Sprout, FlaskConical, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
-import { Field, FertilizerPlan, SeedPlan } from '../types';
+import { Sprout, FlaskConical, Sparkles, AlertCircle, Loader2, CalendarClock, ListChecks, Save } from 'lucide-react';
+import { Field, FertilizerPlan, SeedPlan, AIPlan } from '../types';
 import { analyzeFertilizerNeeds, analyzeSeedingNeeds } from '../services/geminiService';
 import { useLanguage } from '../contexts/LanguageContext';
 
 interface AgroCalculatorProps {
   fields: Field[];
+  onUpdateField: (field: Field) => void;
 }
 
-export const AgroCalculator: React.FC<AgroCalculatorProps> = ({ fields }) => {
+export const AgroCalculator: React.FC<AgroCalculatorProps> = ({ fields, onUpdateField }) => {
   const { t, language } = useLanguage();
   const [selectedFieldId, setSelectedFieldId] = useState<string>('');
   const [cropType, setCropType] = useState('');
+  const [targetYield, setTargetYield] = useState('');
+  const [soilType, setSoilType] = useState('sierozem');
   const [chemicalInput, setChemicalInput] = useState('');
   const [activeTab, setActiveTab] = useState<'SEEDS' | 'CHEMICALS'>('SEEDS');
   
@@ -31,7 +34,7 @@ export const AgroCalculator: React.FC<AgroCalculatorProps> = ({ fields }) => {
     setLoading(true);
     try {
         if (activeTab === 'SEEDS') {
-            const result = await analyzeSeedingNeeds(selectedField.areaHa, cropType, language);
+            const result = await analyzeSeedingNeeds(selectedField.areaHa, cropType, targetYield, soilType, language);
             setSeedResult(result);
             setFertResult(null);
         } else {
@@ -49,6 +52,39 @@ export const AgroCalculator: React.FC<AgroCalculatorProps> = ({ fields }) => {
     } finally {
         setLoading(false);
     }
+  };
+
+  const handleSavePlan = () => {
+    if (!selectedField) return;
+
+    let plan: AIPlan;
+
+    if (activeTab === 'SEEDS' && seedResult) {
+      plan = {
+        type: 'SEEDING',
+        createdAt: new Date().toISOString(),
+        summary: `Seeding: ${seedResult.cropType}, ${seedResult.totalSeedsNeeded}`,
+        details: seedResult
+      };
+    } else if (activeTab === 'CHEMICALS' && fertResult) {
+      plan = {
+        type: 'FERTILIZER',
+        createdAt: new Date().toISOString(),
+        summary: `Fertilizer: ${fertResult.productName}, ${fertResult.totalAmount}`,
+        details: fertResult
+      };
+    } else {
+      return;
+    }
+
+    const updatedField: Field = {
+      ...selectedField,
+      cropType: cropType || selectedField.cropType,
+      aiPlan: plan
+    };
+
+    onUpdateField(updatedField);
+    alert(t.calculator.planSaved);
   };
 
   return (
@@ -101,8 +137,38 @@ export const AgroCalculator: React.FC<AgroCalculatorProps> = ({ fields }) => {
             </button>
           </div>
 
+          {activeTab === 'SEEDS' && (
+             <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300 pt-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.calculator.yieldLabel}</label>
+                    <input 
+                       type="number"
+                       placeholder="4.5"
+                       value={targetYield}
+                       onChange={(e) => setTargetYield(e.target.value)}
+                       className="w-full p-3 bg-slate-50 dark:bg-yield-900/20 border border-slate-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-yield-500 outline-none text-slate-800 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.calculator.soilLabel}</label>
+                    <select 
+                       value={soilType}
+                       onChange={(e) => setSoilType(e.target.value)}
+                       className="w-full p-3 bg-slate-50 dark:bg-yield-900/20 border border-slate-200 dark:border-dark-border rounded-lg focus:ring-2 focus:ring-yield-500 outline-none text-slate-800 dark:text-white"
+                    >
+                      <option value="sierozem">{t.calculator.soilTypes.sierozem}</option>
+                      <option value="sandy">{t.calculator.soilTypes.sandy}</option>
+                      <option value="clay">{t.calculator.soilTypes.clay}</option>
+                      <option value="loam">{t.calculator.soilTypes.loam}</option>
+                    </select>
+                  </div>
+                </div>
+             </div>
+          )}
+
           {activeTab === 'CHEMICALS' && (
-             <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+             <div className="animate-in fade-in slide-in-from-top-2 duration-300 pt-2">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{t.calculator.chemLabel}</label>
                 <input 
                    type="text"
@@ -150,46 +216,96 @@ export const AgroCalculator: React.FC<AgroCalculatorProps> = ({ fields }) => {
 
          {seedResult && activeTab === 'SEEDS' && (
             <div className="bg-white dark:bg-dark-card rounded-2xl shadow-sm border border-slate-200 dark:border-dark-border overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-               <div className="bg-yield-600 p-6 text-white">
-                  <div className="flex items-center gap-2 opacity-80 mb-1">
-                     <Sprout size={18} />
-                     <span className="text-sm font-medium uppercase tracking-wider">{t.calculator.planSeeds}</span>
+               <div className="bg-yield-600 p-6 text-white flex justify-between items-start">
+                  <div>
+                      <div className="flex items-center gap-2 opacity-80 mb-1">
+                         <Sprout size={18} />
+                         <span className="text-sm font-medium uppercase tracking-wider">{t.calculator.planSeeds}</span>
+                      </div>
+                      <h2 className="text-2xl font-bold">{seedResult.cropType}</h2>
+                      <div className="mt-2 text-yield-100 text-sm">{t.calculator.field}: {selectedField?.name} ({selectedField?.areaHa} га)</div>
                   </div>
-                  <h2 className="text-2xl font-bold">{seedResult.cropType}</h2>
-                  <div className="mt-2 text-yield-100 text-sm">{t.calculator.field}: {selectedField?.name} ({selectedField?.areaHa} га)</div>
+                  <button 
+                    onClick={handleSavePlan}
+                    className="bg-white/20 hover:bg-white/30 text-white p-2.5 rounded-lg backdrop-blur-sm transition-all flex items-center gap-2 text-sm font-bold"
+                  >
+                    <Save size={18} /> {t.common.save}
+                  </button>
                </div>
-               <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-1">
-                     <div className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">{t.calculator.recVariety}</div>
-                     <div className="text-lg font-medium text-slate-800 dark:text-white">{seedResult.seedVarietyRecommendation}</div>
+               <div className="p-6">
+                  {/* Key Metrics */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">{t.calculator.recVariety}</div>
+                        <div className="text-lg font-medium text-slate-800 dark:text-white">{seedResult.seedVarietyRecommendation}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">{t.calculator.depth}</div>
+                        <div className="text-lg font-medium text-slate-800 dark:text-white">{seedResult.optimalPlantingDepth}</div>
+                      </div>
+                      <div className="col-span-1 md:col-span-2 bg-yield-50 dark:bg-yield-900/20 p-4 rounded-xl border border-yield-100 dark:border-yield-900 flex flex-col md:flex-row gap-6">
+                        <div className="flex-1">
+                            <div className="text-sm text-yield-700 dark:text-yield-300 font-medium mb-1">{t.calculator.ratePerHa}</div>
+                            <div className="text-2xl font-bold text-yield-900 dark:text-white">{seedResult.seedsPerHa}</div>
+                        </div>
+                        <div className="flex-1">
+                            <div className="text-sm text-yield-700 dark:text-yield-300 font-medium mb-1">{t.calculator.totalNeeded}</div>
+                            <div className="text-2xl font-bold text-yield-900 dark:text-white">{seedResult.totalSeedsNeeded}</div>
+                        </div>
+                      </div>
                   </div>
-                  <div className="space-y-1">
-                     <div className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">{t.calculator.depth}</div>
-                     <div className="text-lg font-medium text-slate-800 dark:text-white">{seedResult.optimalPlantingDepth}</div>
-                  </div>
-                  <div className="col-span-1 md:col-span-2 bg-yield-50 dark:bg-yield-900/20 p-4 rounded-xl border border-yield-100 dark:border-yield-900 flex flex-col md:flex-row gap-6">
-                     <div className="flex-1">
-                        <div className="text-sm text-yield-700 dark:text-yield-300 font-medium mb-1">{t.calculator.ratePerHa}</div>
-                        <div className="text-2xl font-bold text-yield-900 dark:text-white">{seedResult.seedsPerHa}</div>
-                     </div>
-                     <div className="flex-1">
-                        <div className="text-sm text-yield-700 dark:text-yield-300 font-medium mb-1">{t.calculator.totalNeeded}</div>
-                        <div className="text-2xl font-bold text-yield-900 dark:text-white">{seedResult.totalSeedsNeeded}</div>
-                     </div>
-                  </div>
+
+                  {/* Operation Plan */}
+                  {seedResult.operationPlan && (
+                    <div className="border-t border-slate-100 dark:border-dark-border pt-6">
+                       <h3 className="font-bold text-lg mb-4 text-slate-800 dark:text-white flex items-center gap-2">
+                         <ListChecks size={20} className="text-yield-600" />
+                         {t.calculator.opsPlan}
+                       </h3>
+                       <div className="space-y-4">
+                         {seedResult.operationPlan.map((step, idx) => (
+                           <div key={idx} className="flex gap-4">
+                              <div className="flex flex-col items-center">
+                                 <div className="w-8 h-8 rounded-full bg-yield-100 dark:bg-yield-900/50 text-yield-700 dark:text-yield-300 flex items-center justify-center font-bold text-sm">
+                                   {idx + 1}
+                                 </div>
+                                 {idx < seedResult.operationPlan!.length - 1 && <div className="w-0.5 h-full bg-slate-200 dark:bg-yield-900/30 my-1"></div>}
+                              </div>
+                              <div className="pb-4">
+                                 <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-3 mb-1">
+                                    <span className="font-bold text-slate-800 dark:text-white">{step.stepName}</span>
+                                    <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full flex items-center gap-1 w-fit">
+                                       <CalendarClock size={12} /> {step.timing}
+                                    </span>
+                                 </div>
+                                 <p className="text-sm text-slate-600 dark:text-slate-400">{step.description}</p>
+                              </div>
+                           </div>
+                         ))}
+                       </div>
+                    </div>
+                  )}
                </div>
             </div>
          )}
 
          {fertResult && activeTab === 'CHEMICALS' && (
             <div className="bg-white dark:bg-dark-card rounded-2xl shadow-sm border border-slate-200 dark:border-dark-border overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-               <div className="bg-blue-600 dark:bg-blue-700 p-6 text-white">
-                  <div className="flex items-center gap-2 opacity-80 mb-1">
-                     <FlaskConical size={18} />
-                     <span className="text-sm font-medium uppercase tracking-wider">{t.calculator.planFert}</span>
+               <div className="bg-blue-600 dark:bg-blue-700 p-6 text-white flex justify-between items-start">
+                  <div>
+                      <div className="flex items-center gap-2 opacity-80 mb-1">
+                         <FlaskConical size={18} />
+                         <span className="text-sm font-medium uppercase tracking-wider">{t.calculator.planFert}</span>
+                      </div>
+                      <h2 className="text-2xl font-bold">{fertResult.productName}</h2>
+                      <div className="mt-2 text-blue-100 text-sm">{t.calculator.field}: {selectedField?.name} ({selectedField?.areaHa} га)</div>
                   </div>
-                  <h2 className="text-2xl font-bold">{fertResult.productName}</h2>
-                  <div className="mt-2 text-blue-100 text-sm">{t.calculator.field}: {selectedField?.name} ({selectedField?.areaHa} га)</div>
+                  <button 
+                    onClick={handleSavePlan}
+                    className="bg-white/20 hover:bg-white/30 text-white p-2.5 rounded-lg backdrop-blur-sm transition-all flex items-center gap-2 text-sm font-bold"
+                  >
+                    <Save size={18} /> {t.common.save}
+                  </button>
                </div>
                <div className="p-6 space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
