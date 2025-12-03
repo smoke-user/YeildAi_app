@@ -1,6 +1,6 @@
 
-import React, { useState, useRef } from 'react';
-import { Trash2, Check, Ruler, Info } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Trash2, Check, Ruler, Info, MapPin, Loader2, Navigation, Layers, AlertCircle, Search, Crosshair } from 'lucide-react';
 import { Coordinate, Field } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -10,42 +10,298 @@ interface FieldMappingProps {
 
 export const FieldMapping: React.FC<FieldMappingProps> = ({ onSaveField }) => {
   const { t } = useLanguage();
-  const [points, setPoints] = useState<Coordinate[]>([]);
-  const [isDrawing, setIsDrawing] = useState(true);
   const [fieldName, setFieldName] = useState('');
   const [calculatedArea, setCalculatedArea] = useState<number>(0);
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [gpsError, setGpsError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [mapType, setMapType] = useState<'schematic' | 'satellite'>('schematic');
+  const [hasPoints, setHasPoints] = useState(false);
+  
+  const mapElement = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null); // OpenLayers Map instance
+  const vectorSourceRef = useRef<any>(null); // Source for drawn features
+  const osmLayerRef = useRef<any>(null);
+  const satelliteLayerRef = useRef<any>(null);
+  const userLocationLayerRef = useRef<any>(null); // Layer for blue dot
 
-  const calculateArea = (coords: Coordinate[]) => {
-    if (coords.length < 3) return 0;
-    let area = 0;
-    for (let i = 0; i < coords.length; i++) {
-      const j = (i + 1) % coords.length;
-      area += coords[i].x * coords[j].y;
-      area -= coords[j].x * coords[i].y;
+  // Initialize OpenLayers Map
+  useEffect(() => {
+    if (!mapElement.current) return;
+    if (mapRef.current) return; // Prevent double init
+
+    const ol = (window as any).ol;
+    if (!ol) {
+        console.error("OpenLayers not loaded");
+        return;
     }
-    const areaSqMeters = Math.abs(area) / 2;
-    return areaSqMeters / 10000;
+
+    // Default View (Tashkent)
+    const tashkentCoords = ol.proj.fromLonLat([69.2401, 41.2995]);
+
+    // Layers
+    const osmSource = new ol.source.OSM();
+    osmLayerRef.current = new ol.layer.Tile({
+        source: osmSource,
+        visible: true
+    });
+
+    const satelliteSource = new ol.source.XYZ({
+        url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attributions: 'Tiles © Esri',
+        maxZoom: 19
+    });
+    satelliteLayerRef.current = new ol.layer.Tile({
+        source: satelliteSource,
+        visible: false
+    });
+
+    // Vector Layer for Drawing
+    vectorSourceRef.current = new ol.source.Vector({ wrapX: false });
+    const vectorLayer = new ol.layer.Vector({
+        source: vectorSourceRef.current,
+        style: new ol.style.Style({
+            fill: new ol.style.Fill({
+                color: 'rgba(34, 197, 94, 0.3)' // yield-500 with opacity
+            }),
+            stroke: new ol.style.Stroke({
+                color: '#16a34a', // yield-600
+                width: 3
+            }),
+            image: new ol.style.Circle({
+                radius: 7,
+                fill: new ol.style.Fill({
+                    color: '#ffffff'
+                }),
+                stroke: new ol.style.Stroke({
+                    color: '#16a34a',
+                    width: 2
+                })
+            })
+        })
+    });
+
+    // Vector Layer for User Location (Blue Dot)
+    const userLocationSource = new ol.source.Vector();
+    userLocationLayerRef.current = new ol.layer.Vector({
+        source: userLocationSource,
+        zIndex: 100
+    });
+
+    // Create Map
+    const map = new ol.Map({
+        target: mapElement.current,
+        layers: [
+            osmLayerRef.current,
+            satelliteLayerRef.current,
+            vectorLayer,
+            userLocationLayerRef.current
+        ],
+        view: new ol.View({
+            center: tashkentCoords,
+            zoom: 13
+        }),
+        controls: ol.control.defaults.defaults({
+            attribution: false,
+            zoom: false // We use custom buttons or pinch
+        })
+    });
+
+    // Add Interaction (Draw Polygon)
+    const draw = new ol.interaction.Draw({
+        source: vectorSourceRef.current,
+        type: 'Polygon',
+        // Style for the drawing line while dragging
+        style: new ol.style.Style({
+            fill: new ol.style.Fill({
+                color: 'rgba(255, 255, 255, 0.2)'
+            }),
+            stroke: new ol.style.Stroke({
+                color: '#16a34a', // yield-600
+                width: 2,
+                lineDash: [10, 10]
+            }),
+            image: new ol.style.Circle({
+                radius: 5,
+                stroke: new ol.style.Stroke({
+                    color: '#16a34a'
+                }),
+                fill: new ol.style.Fill({
+                    color: 'rgba(255, 255, 255, 0.2)'
+                })
+            })
+        })
+    });
+
+    draw.on('drawstart', () => {
+        // Clear previous drawings when starting a new one
+        vectorSourceRef.current.clear();
+        setCalculatedArea(0);
+        setHasPoints(false);
+    });
+
+    draw.on('drawend', (event: any) => {
+        const polygon = event.feature.getGeometry();
+        calculateArea(polygon);
+        setHasPoints(true);
+    });
+
+    map.addInteraction(draw);
+    mapRef.current = map;
+
+    // Try locate user initially
+    locateUser();
+
+    // Resize Observer to fix any container size issues
+    const resizeObserver = new ResizeObserver(() => {
+        if (mapRef.current) {
+            mapRef.current.updateSize();
+        }
+    });
+    resizeObserver.observe(mapElement.current);
+
+    return () => {
+        resizeObserver.disconnect();
+        map.setTarget(undefined);
+    };
+  }, []);
+
+  // Effect to toggle layers
+  useEffect(() => {
+    if (!osmLayerRef.current || !satelliteLayerRef.current) return;
+    
+    if (mapType === 'schematic') {
+        osmLayerRef.current.setVisible(true);
+        satelliteLayerRef.current.setVisible(false);
+    } else {
+        osmLayerRef.current.setVisible(false);
+        satelliteLayerRef.current.setVisible(true);
+    }
+  }, [mapType]);
+
+  const calculateArea = (polygonGeometry: any) => {
+      const ol = (window as any).ol;
+      // Get area in square meters using geodesic calculation
+      const area = ol.sphere.getArea(polygonGeometry, { projection: 'EPSG:3857' });
+      const areaHa = area / 10000;
+      setCalculatedArea(areaHa);
   };
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDrawing) return;
-    
-    if (canvasRef.current) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      
-      const newPoints = [...points, { x, y }];
-      setPoints(newPoints);
-      setCalculatedArea(calculateArea(newPoints));
+  const locateUser = () => {
+    if (!mapRef.current) return;
+    const ol = (window as any).ol;
+    setIsLocating(true);
+    setGpsError(false);
+
+    if (!navigator.geolocation) {
+        setGpsError(true);
+        setIsLocating(false);
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        const coords = ol.proj.fromLonLat([longitude, latitude]);
+        
+        mapRef.current.getView().animate({
+            center: coords,
+            zoom: 17,
+            duration: 1000
+        });
+
+        // Add Blue Dot
+        const userFeature = new ol.Feature({
+            geometry: new ol.geom.Point(coords)
+        });
+        
+        userFeature.setStyle(new ol.style.Style({
+            image: new ol.style.Circle({
+                radius: 8,
+                fill: new ol.style.Fill({ color: '#3b82f6' }), // Blue
+                stroke: new ol.style.Stroke({
+                    color: '#fff',
+                    width: 2
+                })
+            })
+        }));
+
+        userLocationLayerRef.current.getSource().clear();
+        userLocationLayerRef.current.getSource().addFeature(userFeature);
+
+        setIsLocating(false);
+        setGpsError(false);
+      },
+      (error) => {
+        console.error("Error getting location", error);
+        setIsLocating(false);
+        setGpsError(true);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
+
+  const handleManualSearch = async () => {
+    if (!searchQuery || !mapRef.current) return;
+    const ol = (window as any).ol;
+    setIsSearching(true);
+    setGpsError(false);
+
+    // Check coords
+    const coordMatch = searchQuery.match(/^(-?\d+(\.\d+)?),\s*(-?\d+(\.\d+)?)$/);
+    if (coordMatch) {
+        const lat = parseFloat(coordMatch[1]);
+        const lng = parseFloat(coordMatch[3]);
+        const coords = ol.proj.fromLonLat([lng, lat]);
+        mapRef.current.getView().animate({ center: coords, zoom: 17 });
+        setIsSearching(false);
+        return;
+    }
+
+    // Nominatim
+    try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`);
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+            const { lat, lon } = data[0];
+            const coords = ol.proj.fromLonLat([parseFloat(lon), parseFloat(lat)]);
+            
+            mapRef.current.getView().animate({ center: coords, zoom: 16 });
+
+            // Add Pin
+            const searchFeature = new ol.Feature({
+                geometry: new ol.geom.Point(coords)
+            });
+            searchFeature.setStyle(new ol.style.Style({
+                image: new ol.style.Icon({
+                    src: 'https://cdn-icons-png.flaticon.com/512/447/447031.png', // Simple pin icon
+                    scale: 0.05,
+                    anchor: [0.5, 1]
+                })
+            }));
+            
+            // Re-use user location layer for temporary search pin
+            userLocationLayerRef.current.getSource().clear();
+            userLocationLayerRef.current.getSource().addFeature(searchFeature);
+
+        } else {
+            alert(t.mapping?.enterNameAlert || "Location not found");
+        }
+    } catch (e) {
+        console.error("Search error", e);
+    } finally {
+        setIsSearching(false);
     }
   };
 
   const resetMap = () => {
-    setPoints([]);
-    setIsDrawing(true);
+    if (vectorSourceRef.current) {
+        vectorSourceRef.current.clear();
+    }
     setCalculatedArea(0);
+    setHasPoints(false);
     setFieldName('');
   };
 
@@ -54,13 +310,36 @@ export const FieldMapping: React.FC<FieldMappingProps> = ({ onSaveField }) => {
       alert(t.mapping.enterNameAlert);
       return;
     }
+    if (calculatedArea <= 0) {
+        alert("Please draw a field area first.");
+        return;
+    }
+
+    const ol = (window as any).ol;
+    
+    // Extract coordinates to save (convert back to Lat/Lng)
+    const features = vectorSourceRef.current.getFeatures();
+    if (features.length === 0) return;
+    
+    const geometry = features[0].getGeometry();
+    const coordinates = geometry.getCoordinates(); // This is typically [ [ [x,y], [x,y] ... ] ] for polygons
+    
+    // Flatten and convert
+    // OpenLayers Polygons are arrays of rings. The first ring is the outer boundary.
+    const ring = coordinates[0]; 
+    const savedPoints: Coordinate[] = ring.map((pt: any) => {
+        const lonLat = ol.proj.toLonLat(pt);
+        return { lat: lonLat[1], lng: lonLat[0] };
+    });
+
     const newField: Field = {
       id: Date.now().toString(),
       name: fieldName,
       areaHa: Number(calculatedArea.toFixed(4)),
-      coordinates: points,
+      coordinates: savedPoints,
       plantingDate: new Date().toISOString().split('T')[0]
     };
+
     onSaveField(newField);
     resetMap();
     alert(t.mapping.saveAlert);
@@ -75,9 +354,22 @@ export const FieldMapping: React.FC<FieldMappingProps> = ({ onSaveField }) => {
               <Ruler className="text-yield-600" />
               {t.mapping.title}
             </h2>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-              {t.mapping.desc}
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+                {gpsError ? (
+                     <span className="flex items-center gap-1.5 text-xs font-bold text-red-600 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded-full animate-pulse">
+                         <AlertCircle size={12} />
+                         GPS ERROR
+                     </span>
+                ) : (
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-green-600 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded-full">
+                         <Crosshair size={12} />
+                         GPS READY
+                     </span>
+                )}
+                <p className="text-slate-500 dark:text-slate-400 text-sm">
+                  {t.mapping.desc}
+                </p>
+            </div>
           </div>
           <div className="self-end md:self-auto text-right bg-yield-50 dark:bg-yield-900/30 px-4 py-2 rounded-lg md:bg-transparent md:p-0">
              <div className="text-xs md:text-sm text-slate-500 dark:text-slate-400 uppercase font-semibold">{t.mapping.areaLabel}</div>
@@ -87,45 +379,57 @@ export const FieldMapping: React.FC<FieldMappingProps> = ({ onSaveField }) => {
           </div>
         </div>
 
-        {/* Map Canvas Simulation */}
-        <div 
-          ref={canvasRef}
-          onClick={handleCanvasClick}
-          className="relative w-full h-64 md:h-96 bg-slate-100 dark:bg-[#032019] rounded-xl border-2 border-dashed border-slate-300 dark:border-yield-900 overflow-hidden cursor-crosshair group hover:border-yield-400 transition-colors touch-none"
-          style={{
-             backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)',
-             backgroundSize: '20px 20px'
-          }}
-        >
-          {points.length === 0 && (
-             <div className="absolute inset-0 flex items-center justify-center text-slate-400 pointer-events-none p-4 text-center">
-                <span className="bg-white/80 dark:bg-black/50 px-4 py-2 rounded-full text-sm backdrop-blur-sm">{t.mapping.clickToAdd}</span>
-             </div>
-          )}
+        {/* Search Bar for Manual Location */}
+        <div className="mb-4 flex gap-2">
+            <div className="relative flex-1">
+                <input 
+                    type="text" 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Enter Address or Coordinates (lat, lng)..." 
+                    className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-yield-900/20 border border-slate-300 dark:border-dark-border rounded-lg text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-yield-500 outline-none"
+                    onKeyDown={(e) => e.key === 'Enter' && handleManualSearch()}
+                />
+                <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+            </div>
+            <button 
+                onClick={handleManualSearch}
+                disabled={isSearching}
+                className="px-4 py-2 bg-slate-200 dark:bg-yield-800 text-slate-700 dark:text-white rounded-lg text-sm font-medium hover:bg-slate-300 dark:hover:bg-yield-700 transition-colors"
+            >
+                {isSearching ? <Loader2 size={16} className="animate-spin" /> : "Search"}
+            </button>
+        </div>
 
-          <svg className="absolute inset-0 w-full h-full pointer-events-none">
-             {points.length > 0 && (
-                <>
-                  <polygon 
-                    points={points.map(p => `${p.x},${p.y}`).join(' ')} 
-                    className="fill-yield-500/20 stroke-yield-600 stroke-2"
-                  />
-                  {points.length > 2 && (
-                    <line 
-                       x1={points[points.length-1].x} 
-                       y1={points[points.length-1].y}
-                       x2={points[0].x}
-                       y2={points[0].y}
-                       className="stroke-yield-600 stroke-1 stroke-dasharray-4"
-                       opacity="0.5"
-                    />
-                  )}
-                </>
-             )}
-             {points.map((p, idx) => (
-                <circle key={idx} cx={p.x} cy={p.y} r="5" className="fill-white stroke-yield-600 stroke-2" />
-             ))}
-          </svg>
+        {/* OpenLayers Map Container */}
+        <div className="relative rounded-xl overflow-hidden border-2 border-slate-300 dark:border-yield-900 h-[60vh] md:h-[500px] shadow-inner group w-full">
+            <div ref={mapElement} className="w-full h-full bg-slate-100" />
+            
+            {/* Map Controls Overlay */}
+            <div className="absolute bottom-4 right-4 z-[100] flex flex-col gap-2">
+                <button 
+                    onClick={() => setMapType(prev => prev === 'schematic' ? 'satellite' : 'schematic')}
+                    className="bg-white dark:bg-yield-900 text-slate-700 dark:text-white p-3 rounded-full shadow-lg border border-slate-200 dark:border-dark-border hover:bg-slate-50 active:scale-95 transition-all"
+                    title="Toggle Layer"
+                >
+                    <Layers size={20} />
+                </button>
+                <button 
+                    onClick={locateUser}
+                    className={`bg-white dark:bg-yield-900 p-3 rounded-full shadow-lg border border-slate-200 dark:border-dark-border hover:bg-slate-50 active:scale-95 transition-all ${gpsError ? 'text-red-500' : 'text-slate-700 dark:text-white'}`}
+                    title="Find My Location"
+                >
+                    {isLocating ? <Loader2 className="animate-spin" size={20} /> : <Navigation size={20} />}
+                </button>
+            </div>
+
+            {!hasPoints && (
+                 <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] pointer-events-none w-max max-w-[90%] text-center">
+                    <span className="bg-white/90 dark:bg-black/70 px-4 py-2 rounded-full text-sm font-medium shadow-md text-slate-700 dark:text-white backdrop-blur-sm flex items-center justify-center gap-2">
+                        <MapPin size={16} /> {t.mapping.clickToAdd}
+                    </span>
+                 </div>
+            )}
         </div>
 
         <div className="mt-6 flex flex-col md:flex-row items-stretch md:items-center gap-4">
@@ -148,9 +452,9 @@ export const FieldMapping: React.FC<FieldMappingProps> = ({ onSaveField }) => {
              </button>
              <button 
                onClick={saveField}
-               disabled={points.length < 3}
+               disabled={!hasPoints}
                className={`flex-1 md:flex-none px-8 py-3 md:py-2.5 rounded-lg flex items-center justify-center gap-2 font-bold text-white transition-all active:scale-[0.98] ${
-                 points.length < 3 
+                 !hasPoints 
                    ? 'bg-slate-300 dark:bg-slate-700 cursor-not-allowed' 
                    : 'bg-yield-600 hover:bg-yield-700 shadow-lg shadow-yield-900/20'
                }`}

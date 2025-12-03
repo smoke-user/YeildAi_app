@@ -1,6 +1,6 @@
 export interface Coordinate {
-  x: number;
-  y: number;
+  lat: number;
+  lng: number;
 }
 
 export interface Field {
