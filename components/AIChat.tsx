@@ -1,25 +1,44 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Image as ImageIcon, Loader2, Bot, User, X } from 'lucide-react';
+import { Send, Image as ImageIcon, Loader2, Bot, User, X, Database } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { sendChatMessage } from '../services/geminiService';
-import { ChatMessage } from '../types';
+import { ChatMessage, Field } from '../types';
+import { DB } from '../services/db';
 
-export const AIChat: React.FC = () => {
+interface AIChatProps {
+  fields: Field[];
+}
+
+export const AIChat: React.FC<AIChatProps> = ({ fields }) => {
   const { t, language } = useLanguage();
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'welcome',
-      role: 'model',
-      text: t.chat.welcome,
-      timestamp: Date.now()
-    }
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load History from DB on mount
+  useEffect(() => {
+    const loadHistory = async () => {
+        const history = await DB.getAllMessages();
+        if (history.length === 0) {
+            // Add default welcome if DB is empty
+            const welcomeMsg: ChatMessage = {
+                id: 'welcome',
+                role: 'model',
+                text: t.chat.welcome,
+                timestamp: Date.now()
+            };
+            setMessages([welcomeMsg]);
+            await DB.saveMessage(welcomeMsg);
+        } else {
+            setMessages(history);
+        }
+    };
+    loadHistory();
+  }, [t.chat.welcome]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -54,14 +73,51 @@ export const AIChat: React.FC = () => {
       timestamp: Date.now()
     };
 
+    // Save to UI and DB immediately
     setMessages(prev => [...prev, newUserMessage]);
+    await DB.saveMessage(newUserMessage);
+
     setInputText('');
     const imageToSend = selectedImage;
     setSelectedImage(null);
     setLoading(true);
 
     try {
-      const responseText = await sendChatMessage(newUserMessage.text, imageToSend, language);
+      // Build detailed context for Agent 2 from independent plans
+      const contextData = fields.map(f => {
+        const plans: any = {};
+
+        if (f.seedPlan) {
+             const d = f.seedPlan;
+             plans.SEEDING_PLAN = {
+                 status: "CALCULATED",
+                 crop: d.cropType,
+                 seeds_per_ha: d.seedsPerHa,
+                 total_seeds_kg: d.totalSeedsNeeded,
+                 variety: d.seedVarietyRecommendation,
+                 yield_impact: d.estimatedYieldProjection
+             };
+        }
+
+        if (f.fertilizerPlan) {
+            const d = f.fertilizerPlan;
+            plans.FERTILIZER_PLAN = {
+                 status: "CALCULATED",
+                 product: d.productName,
+                 amount_per_ha: d.amountPerHa,
+                 total_amount: d.totalAmount
+            };
+        }
+
+        return {
+            field_name: f.name,
+            area: `${f.areaHa} ha`,
+            soil_type: f.soilType || "N/A",
+            active_plans: plans
+        };
+      });
+
+      const responseText = await sendChatMessage(newUserMessage.text, messages, imageToSend, contextData, language);
       
       const newAiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -71,6 +127,8 @@ export const AIChat: React.FC = () => {
       };
       
       setMessages(prev => [...prev, newAiMessage]);
+      await DB.saveMessage(newAiMessage);
+
     } catch (error) {
       console.error(error);
     } finally {
@@ -81,7 +139,7 @@ export const AIChat: React.FC = () => {
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] bg-white dark:bg-dark-card rounded-2xl shadow-sm border border-slate-200 dark:border-dark-border overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-slate-200 dark:border-dark-border bg-yield-50 dark:bg-yield-900/30">
+      <div className="p-4 border-b border-slate-200 dark:border-dark-border bg-yield-50 dark:bg-yield-900/30 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <div className="bg-yield-600 p-2 rounded-lg text-white">
             <Bot size={24} />
@@ -91,6 +149,16 @@ export const AIChat: React.FC = () => {
             <p className="text-xs text-slate-500 dark:text-slate-400">{t.chat.subtitle}</p>
           </div>
         </div>
+        
+        {/* Context Indicator */}
+        {fields.length > 0 && (
+          <div className="flex items-center gap-2 bg-white dark:bg-yield-900 px-3 py-1.5 rounded-full border border-yield-200 dark:border-yield-800 shadow-sm">
+             <Database size={14} className="text-yield-600 dark:text-yield-400" />
+             <span className="text-[10px] font-medium text-yield-800 dark:text-yield-200">
+               {fields.length} {t.common.fieldDeleted ? "Fields Active" : "Fields Connected"}
+             </span>
+          </div>
+        )}
       </div>
 
       {/* Messages Area */}

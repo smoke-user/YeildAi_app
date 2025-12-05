@@ -195,6 +195,7 @@ export const FieldMapping: React.FC<FieldMappingProps> = ({ onSaveField }) => {
     setGpsError(false);
 
     if (!navigator.geolocation) {
+        console.error("Geolocation is not supported by this browser.");
         setGpsError(true);
         setIsLocating(false);
         return;
@@ -227,14 +228,31 @@ export const FieldMapping: React.FC<FieldMappingProps> = ({ onSaveField }) => {
             })
         }));
 
-        userLocationLayerRef.current.getSource().clear();
-        userLocationLayerRef.current.getSource().addFeature(userFeature);
+        if (userLocationLayerRef.current) {
+            userLocationLayerRef.current.getSource().clear();
+            userLocationLayerRef.current.getSource().addFeature(userFeature);
+        }
 
         setIsLocating(false);
         setGpsError(false);
       },
       (error) => {
-        console.error("Error getting location", error);
+        // Improved error handling
+        let errorMessage = "Unknown error";
+        switch (error.code) {
+            case error.PERMISSION_DENIED:
+                errorMessage = "User denied the request for Geolocation.";
+                break;
+            case error.POSITION_UNAVAILABLE:
+                errorMessage = "Location information is unavailable.";
+                break;
+            case error.TIMEOUT:
+                errorMessage = "The request to get user location timed out.";
+                break;
+            default:
+                errorMessage = error.message;
+        }
+        console.error("Error getting location:", errorMessage);
         setIsLocating(false);
         setGpsError(true);
       },
@@ -342,7 +360,6 @@ export const FieldMapping: React.FC<FieldMappingProps> = ({ onSaveField }) => {
 
     onSaveField(newField);
     resetMap();
-    alert(t.mapping.saveAlert);
   };
 
   return (

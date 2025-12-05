@@ -10,6 +10,9 @@ export interface FertilizerPlan {
   totalAmount: string;
   applicationMethod: string;
   safetyAdvice: string;
+  suitabilityAnalysis?: string; // New: AI explanation of fit
+  recommendedSoilTests?: string[]; // New: List of labs needed
+  createdAt?: string;
 }
 
 export interface OperationStep {
@@ -21,18 +24,15 @@ export interface OperationStep {
 export interface SeedPlan {
   cropType: string;
   seedVarietyRecommendation: string;
-  seedsPerHa: string;
-  totalSeedsNeeded: string;
+  thousandSeedWeight?: string; // Mass of 1000 seeds
+  seedsPerHa: string; // Now explicitly kg/ha
+  totalSeedsNeeded: string; // Total kg
   optimalPlantingDepth: string;
   fertilizerRecommendation?: string;
   operationPlan?: OperationStep[];
-}
-
-export interface AIPlan {
-  type: 'SEEDING' | 'FERTILIZER';
-  createdAt: string;
-  summary: string;
-  details: SeedPlan | FertilizerPlan;
+  estimatedYieldProjection?: string; 
+  sourceCitation?: string; 
+  createdAt?: string;
 }
 
 export interface Field {
@@ -40,10 +40,16 @@ export interface Field {
   name: string;
   areaHa: number;
   coordinates: Coordinate[];
-  cropType?: string;
   plantingDate?: string;
   notes?: string;
-  aiPlan?: AIPlan; // Persisted AI Recommendation
+  
+  // Persisted Calculator Inputs
+  cropType?: string;
+  soilType?: string;
+  
+  // Persisted AI Plans (Independent slots)
+  seedPlan?: SeedPlan;
+  fertilizerPlan?: FertilizerPlan;
 }
 
 export interface DroneStatus {

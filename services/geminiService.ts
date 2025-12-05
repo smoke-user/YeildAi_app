@@ -1,5 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
+import { KnowledgeBase } from "./knowledgeBase";
+import { ChatMessage } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -21,13 +23,30 @@ export const analyzeFertilizerNeeds = async (
 ): Promise<any> => {
   const model = "gemini-2.5-flash";
   
+  // 1. QUERY RAG SYSTEM for Fertilizer Specifications
+  const ragContext = KnowledgeBase.search(fertilizerInput);
+
   const prompt = `
     Field Area: ${areaHa} hectares.
     Crop: ${crop}.
-    Fertilizer/Chemical on hand: ${fertilizerInput}.
+    Fertilizer/Chemical selected: ${fertilizerInput}.
     
-    Calculate the required amount of this fertilizer/chemical for the entire field.
-    Provide application instructions and safety advice.
+    === RAG KNOWLEDGE BASE (FERTILIZER SPECS) ===
+    ${ragContext}
+    =============================================
+
+    Task:
+    1. Calculate the required amount of this fertilizer for the field.
+    2. ANALYZE SUITABILITY: Check if the RAG 'SUITABLE CROPS' list includes '${crop}'. 
+       - If yes, confirm it is effective.
+       - If no, warn the user and suggest checking compatibility.
+       - Explain *when* to apply it based on 'TIMING'.
+    3. SOIL TESTS: List the 'REQUIRED SOIL TESTS' from the RAG data (e.g. N-NO3, P2O5).
+    
+    OUTPUT REQUIREMENTS:
+    - 'suitabilityAnalysis': A short paragraph explaining if this fertilizer fits the crop and why (based on RAG).
+    - 'recommendedSoilTests': An array of strings listing the necessary lab tests.
+    
     IMPORTANT: Provide all text fields in the JSON response in the ${language.toUpperCase()} language.
     Return JSON.
   `;
@@ -47,8 +66,10 @@ export const analyzeFertilizerNeeds = async (
             totalAmount: { type: Type.STRING },
             applicationMethod: { type: Type.STRING },
             safetyAdvice: { type: Type.STRING },
+            suitabilityAnalysis: { type: Type.STRING, description: "Is this fertilizer good for this crop? When to apply?" },
+            recommendedSoilTests: { type: Type.ARRAY, items: { type: Type.STRING } },
           },
-          required: ["productName", "amountPerHa", "totalAmount", "applicationMethod", "safetyAdvice"],
+          required: ["productName", "amountPerHa", "totalAmount", "applicationMethod", "safetyAdvice", "suitabilityAnalysis", "recommendedSoilTests"],
         }
       }
     });
@@ -63,23 +84,41 @@ export const analyzeFertilizerNeeds = async (
 export const analyzeSeedingNeeds = async (
   areaHa: number,
   crop: string,
-  targetYield: string,
   soilType: string,
   language: string = 'ru'
 ): Promise<any> => {
   const model = "gemini-2.5-flash";
 
+  // 1. QUERY RAG SYSTEM (Agent Agronomist) with REAL DATA
+  const ragContext = KnowledgeBase.search(crop);
+
+  // 2. CONSTRUCT PROMPT with RAG Context
   const prompt = `
     Field Area: ${areaHa} hectares.
     Target Crop: ${crop}.
-    Target Yield: ${targetYield} tons/ha.
     Soil Type: ${soilType}.
+    Region: Uzbekistan (Continental Climate).
+
+    === RAG KNOWLEDGE BASE (OFFICIAL STANDARDS & DATASETS) ===
+    ${ragContext}
+    ==========================================================
     
-    1. Calculate optimal seeding rate (kg/ha and total).
-    2. Suggest a seed variety popular in Central Asia/Uzbekistan.
-    3. Create a basic operation plan (steps like "Base Fertilizer", "Seeding", "First Watering", etc).
+    Task: Calculate professional seeding rates based on the RAG DATA provided.
     
-    IMPORTANT: Provide all text fields in the JSON response in the ${language.toUpperCase()} language.
+    INSTRUCTIONS:
+    1. If RAG data is available (status: SUCCESS), YOU MUST USE the provided norms (Seeding Rate, TSW, Density) for your calculation. Do not hallucinate different numbers.
+    2. If RAG data is missing, use general expert knowledge for Central Asia.
+    3. Calculate 'Total Seeds Needed' in KG: (Seeding Rate kg/ha) * (Field Area ha).
+    4. Suggest a specific local variety (e.g., 'Sultan' for Cotton, 'Grom' for Wheat) if not specified in RAG.
+    5. Determine the 'Estimated Yield Projection' based on the 'Yield Potential' in the RAG data.
+    
+    OUTPUT REQUIREMENTS:
+    - 'seedsPerHa': Must be a string with units (e.g. "25 kg/ha").
+    - 'totalSeedsNeeded': Must be a string with units (e.g. "125 kg").
+    - 'thousandSeedWeight': Must match the RAG data if available.
+    - 'sourceCitation': Cite the 'SOURCE' from the RAG context (e.g., "GOST 5947-68" or "CROPGRIDS").
+    
+    Provide all text fields in the JSON response in the ${language.toUpperCase()} language.
     Return JSON.
   `;
 
@@ -95,10 +134,12 @@ export const analyzeSeedingNeeds = async (
           properties: {
             cropType: { type: Type.STRING },
             seedVarietyRecommendation: { type: Type.STRING },
-            seedsPerHa: { type: Type.STRING },
-            totalSeedsNeeded: { type: Type.STRING },
+            thousandSeedWeight: { type: Type.STRING, description: "Weight of 1000 seeds (TSW) in grams from RAG" },
+            seedsPerHa: { type: Type.STRING, description: "Seeding rate in kg/ha" },
+            totalSeedsNeeded: { type: Type.STRING, description: "Total seeds in kg" },
             optimalPlantingDepth: { type: Type.STRING },
-            fertilizerRecommendation: { type: Type.STRING },
+            estimatedYieldProjection: { type: Type.STRING, description: "Projected yield t/ha based on RAG potential" },
+            sourceCitation: { type: Type.STRING, description: "The GOST or dataset used" },
             operationPlan: {
               type: Type.ARRAY,
               items: {
@@ -111,7 +152,7 @@ export const analyzeSeedingNeeds = async (
               }
             }
           },
-          required: ["cropType", "seedVarietyRecommendation", "seedsPerHa", "totalSeedsNeeded", "optimalPlantingDepth", "operationPlan"],
+          required: ["cropType", "seedVarietyRecommendation", "thousandSeedWeight", "seedsPerHa", "totalSeedsNeeded", "optimalPlantingDepth", "operationPlan", "estimatedYieldProjection", "sourceCitation"],
         }
       }
     });
@@ -125,7 +166,9 @@ export const analyzeSeedingNeeds = async (
 
 export const sendChatMessage = async (
   message: string,
+  history: ChatMessage[],
   base64Image: string | null = null,
+  contextData: any = null,
   language: string = 'ru'
 ): Promise<string> => {
   const model = "gemini-2.5-flash"; // Multimodal support
@@ -135,19 +178,55 @@ export const sendChatMessage = async (
   if (base64Image) {
     parts.push({
       inlineData: {
-        mimeType: 'image/jpeg', // Assuming jpeg for simplicity, or detect from header
+        mimeType: 'image/jpeg',
         data: base64Image
       }
     });
   }
 
-  parts.push({
-    text: `User Question: "${message}". 
-    Language: ${language}.
+  // Build History String (Last 10 messages to save context tokens)
+  const recentHistory = history.slice(-10); 
+  const historyText = recentHistory.map(m => 
+    `${m.role === 'user' ? 'User' : 'Agronomist AI'}: ${m.text}`
+  ).join('\n');
+
+  // Construct Prompt with Context
+  let fullPrompt = `
+  CURRENT LANGUAGE: ${language}.
+  
+  === CONVERSATION HISTORY ===
+  ${historyText}
+  ============================
+  
+  User New Question: "${message}".
+  `;
+  
+  if (contextData) {
+    fullPrompt += `
+    \n=== FARM DATA CONTEXT (Use this to answer questions about the user's fields) ===
+    ${JSON.stringify(contextData, null, 2)}
+    ================================================================================
+    `;
+  }
+
+  // Also allow Agent 2 to use RAG for general questions
+  const ragContext = KnowledgeBase.search(message);
+  fullPrompt += `
+  \n=== RAG KNOWLEDGE BASE (REAL AGRONOMIC DATA) ===
+  ${ragContext}
+  ================================================
+  `;
+
+  fullPrompt += `
     If an image is provided, identify the agricultural product (pesticide/fertilizer) or plant disease.
+    If the user asks about their fields (e.g., "What is the plan for Field A?"), use the FARM DATA CONTEXT provided above.
+    If the user asks general questions about norms/crops, use the RAG KNOWLEDGE BASE.
     Provide actionable advice for a farmer in Uzbekistan.
-    Keep the answer concise but informative.`
-  });
+    Keep the answer concise but informative.
+    Maintain the conversation flow based on the HISTORY provided.
+  `;
+
+  parts.push({ text: fullPrompt });
 
   try {
     const response = await ai.models.generateContent({

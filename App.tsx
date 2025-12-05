@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { FieldMapping } from './components/FieldMapping';
@@ -6,10 +7,12 @@ import { DroneConnection } from './components/DroneConnection';
 import { AIChat } from './components/AIChat';
 import { MobileNavigation } from './components/MobileNavigation';
 import { ViewState, Field } from './types';
-import { Map, TrendingUp, Calendar, AlertTriangle, Globe, Moon, Sun, Trash2, FileText } from 'lucide-react';
+import { Map, TrendingUp, Calendar, AlertTriangle, Globe, Moon, Sun, Trash2, FileText, Download, CheckCircle, Database } from 'lucide-react';
 import { useLanguage } from './contexts/LanguageContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { Language } from './utils/translations';
+import { DB } from './services/db'; 
+import { StorageService } from './services/storageService'; 
 
 // Duplicate Logo Component for Header usage
 const YieldAILogoSmall = ({ className }: { className?: string }) => (
@@ -32,12 +35,21 @@ const YieldAILogoSmall = ({ className }: { className?: string }) => (
   </svg>
 );
 
+const Toast = ({ message, onClose }: { message: string; onClose: () => void }) => (
+  <div className="fixed bottom-20 md:bottom-8 right-4 md:right-8 bg-yield-800 dark:bg-yield-600 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 z-50">
+    <CheckCircle size={20} className="text-green-400" />
+    <span className="font-medium">{message}</span>
+    <button onClick={onClose} className="ml-2 opacity-70 hover:opacity-100">×</button>
+  </div>
+);
+
 const Dashboard: React.FC<{ 
   fields: Field[], 
   setView: (view: ViewState) => void, 
   totalArea: number,
-  onDeleteField: (id: string) => void
-}> = ({ fields, setView, totalArea, onDeleteField }) => {
+  onDeleteField: (id: string) => void,
+  onLoadDemo: () => void
+}> = ({ fields, setView, totalArea, onDeleteField, onLoadDemo }) => {
   const { t } = useLanguage();
   
   return (
@@ -74,7 +86,17 @@ const Dashboard: React.FC<{
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
          <div className="bg-white dark:bg-dark-card p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-dark-border transition-colors">
-            <h3 className="font-bold text-lg mb-4 text-yield-900 dark:text-white">{t.dashboard.activeFields}</h3>
+            <div className="flex justify-between items-center mb-4">
+               <h3 className="font-bold text-lg text-yield-900 dark:text-white">{t.dashboard.activeFields}</h3>
+               {fields.length === 0 && (
+                 <button 
+                   onClick={onLoadDemo}
+                   className="text-xs bg-slate-100 dark:bg-yield-900 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1"
+                 >
+                    <Download size={14} /> {t.common.loadDemo}
+                 </button>
+               )}
+            </div>
             {fields.length === 0 ? (
               <div className="text-center py-10 text-yield-800 dark:text-gray-400 bg-yield-50 dark:bg-yield-950/30 rounded-xl border border-dashed border-yield-200 dark:border-dark-border">
                  <p>{t.dashboard.noFields}</p>
@@ -87,18 +109,13 @@ const Dashboard: React.FC<{
                        <div className="space-y-1">
                           <div className="font-bold text-yield-900 dark:text-white flex items-center gap-2">
                             {field.name}
-                            {field.aiPlan && (
-                              <span className="text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 flex items-center gap-1" title={field.aiPlan.summary}>
-                                <FileText size={10} /> AI Plan
+                            {(field.seedPlan || field.fertilizerPlan) && (
+                              <span className="text-[10px] bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 px-1.5 py-0.5 rounded border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+                                <FileText size={10} /> AI Plans
                               </span>
                             )}
                           </div>
                           <div className="text-xs text-yield-600 dark:text-gray-400">{t.dashboard.dateAdded}: {field.plantingDate}</div>
-                          {field.aiPlan && (
-                             <div className="text-xs text-slate-500 dark:text-slate-400 italic max-w-[200px] truncate">
-                               {field.aiPlan.summary}
-                             </div>
-                          )}
                        </div>
                        <div className="flex flex-col items-end gap-2">
                          <div className="px-3 py-1 bg-yield-100 dark:bg-yield-800 text-yield-700 dark:text-yield-100 rounded-lg text-sm font-bold">
@@ -145,52 +162,130 @@ const Dashboard: React.FC<{
 
 const App: React.FC = () => {
   const [currentView, setView] = useState<ViewState>('DASHBOARD');
-  
-  // Persistent State: Initialize from localStorage
-  const [fields, setFields] = useState<Field[]>(() => {
-    try {
-      const savedFields = localStorage.getItem('yield_ai_fields');
-      return savedFields ? JSON.parse(savedFields) : [];
-    } catch (e) {
-      console.error("Failed to load fields from storage", e);
-      return [];
-    }
-  });
+  const [fields, setFields] = useState<Field[]>([]); 
+  const [isDbReady, setIsDbReady] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const { language, setLanguage, t } = useLanguage();
   const { isDarkMode, toggleTheme } = useTheme();
 
-  // Save to localStorage whenever fields change
+  // Robust Initialization with Dual Loading (DB + Backup)
   useEffect(() => {
+    let mounted = true;
+
+    const initData = async () => {
+      try {
+          // 1. Try to load from IndexedDB
+          let loadedFields = await DB.getAllFields();
+          
+          // 2. If DB is empty, check Backup LocalStorage
+          if (loadedFields.length === 0) {
+              console.log("[App] DB empty, checking backup...");
+              const backupFields = StorageService.getFields();
+              if (backupFields.length > 0) {
+                  console.log("[App] Restoring from backup...");
+                  loadedFields = backupFields;
+                  // Restore backup to DB
+                  for (const f of backupFields) {
+                      await DB.saveField(f);
+                  }
+              }
+          }
+
+          if (mounted) {
+              setFields(loadedFields);
+              setIsDbReady(true);
+          }
+      } catch (e) {
+          console.error("Data Initialization Failed", e);
+          if (mounted) setIsDbReady(true); 
+      }
+    };
+    initData();
+
+    return () => { mounted = false; };
+  }, []);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleSaveField = async (field: Field) => {
     try {
-      localStorage.setItem('yield_ai_fields', JSON.stringify(fields));
+        // Dual Write Strategy
+        await DB.saveField(field); // 1. Save to DB
+        
+        // Refresh State
+        const updated = await DB.getAllFields();
+        setFields(updated);
+        
+        StorageService.saveFields(updated); // 2. Save to Backup
+        
+        showToast(t.common.dataSaved);
+        setView('DASHBOARD');
     } catch (e) {
-      console.error("Failed to save fields", e);
+        console.error(e);
+        showToast("Error saving field");
     }
-  }, [fields]);
-
-  const handleSaveField = (field: Field) => {
-    setFields(prev => [...prev, field]);
-    setView('DASHBOARD');
   };
 
-  const handleDeleteField = (id: string) => {
+  const handleDeleteField = async (id: string) => {
     if (confirm("Are you sure you want to delete this field?")) {
-      setFields(prev => prev.filter(f => f.id !== id));
+      await DB.deleteField(id);
+      
+      const updated = await DB.getAllFields();
+      setFields(updated);
+      StorageService.saveFields(updated); // Update Backup
+      
+      showToast(t.common.fieldDeleted);
     }
   };
 
-  const handleUpdateField = (updatedField: Field) => {
-    setFields(prev => prev.map(f => f.id === updatedField.id ? updatedField : f));
+  const handleUpdateField = async (updatedField: Field) => {
+    try {
+        // Dual Write
+        await DB.saveField(updatedField);
+        
+        const updated = await DB.getAllFields();
+        setFields(updated);
+        StorageService.saveFields(updated); // Update Backup
+
+        showToast(t.calculator.planSaved);
+    } catch (e) {
+        console.error("Update failed", e);
+    }
+  };
+
+  const handleLoadDemo = async () => {
+    const demoFields = StorageService.getDemoFields();
+    for (const f of demoFields) {
+        await DB.saveField(f);
+    }
+    const updated = await DB.getAllFields();
+    setFields(updated);
+    StorageService.saveFields(updated); // Backup Demo Data
+    
+    showToast("Demo Data Loaded!");
   };
 
   const totalArea = fields.reduce((acc, field) => acc + field.areaHa, 0);
+
+  // Simple loading screen
+  if (!isDbReady) {
+      return (
+        <div className="h-screen w-full flex flex-col items-center justify-center bg-yield-50 dark:bg-dark-bg text-yield-600 dark:text-yield-100 gap-4">
+          <Database size={40} className="animate-pulse" />
+          <p className="font-mono text-sm">Initializing Database...</p>
+        </div>
+      );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-yield-50 dark:bg-dark-bg font-sans transition-colors duration-300">
       <Sidebar currentView={currentView} setView={setView} />
       
-      <main className="flex-1 overflow-y-auto w-full">
+      <main className="flex-1 overflow-y-auto w-full relative">
         <div className="p-4 md:p-8 pb-24 md:pb-8">
           <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="flex items-center gap-3">
@@ -210,7 +305,6 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex items-center gap-2 self-end md:self-auto">
-              {/* Theme Toggle */}
               <button 
                 onClick={toggleTheme}
                 className="p-2 bg-white dark:bg-dark-card text-yield-600 dark:text-yield-100 rounded-lg shadow-sm border border-slate-200 dark:border-dark-border hover:bg-slate-50 dark:hover:bg-yield-900 transition-colors"
@@ -244,6 +338,7 @@ const App: React.FC = () => {
               setView={setView} 
               totalArea={totalArea} 
               onDeleteField={handleDeleteField}
+              onLoadDemo={handleLoadDemo}
             />
           )}
 
@@ -260,9 +355,14 @@ const App: React.FC = () => {
           )}
 
           {currentView === 'AI_CHAT' && (
-            <AIChat />
+            <AIChat fields={fields} />
           )}
         </div>
+        
+        {/* Toast Notification */}
+        {toastMessage && (
+          <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
+        )}
       </main>
 
       <MobileNavigation currentView={currentView} setView={setView} />
