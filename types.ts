@@ -69,4 +69,21 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-export type ViewState = 'DASHBOARD' | 'MAPPING' | 'CALCULATOR' | 'DRONE_CONTROL' | 'AI_CHAT';
+// RAG TYPES
+export interface RAGDocument {
+  id: string;
+  title: string;
+  type: 'PDF' | 'TEXT';
+  uploadDate: number;
+  status: 'PROCESSING' | 'READY' | 'ERROR';
+  chunks: number; // count of vector chunks
+}
+
+export interface RAGChunk {
+  id: string;
+  docId: string;
+  text: string;
+  embedding: number[];
+}
+
+export type ViewState = 'DASHBOARD' | 'MAPPING' | 'CALCULATOR' | 'DRONE_CONTROL' | 'AI_CHAT' | 'KNOWLEDGE_BASE' | 'PRESENTATION';

@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { KnowledgeBase } from "./knowledgeBase";
 import { ChatMessage } from "../types";
@@ -15,6 +14,25 @@ Always output specific numbers.
 If the user uploads an image of a bottle/bag, identify the product and its active ingredient, then advise on usage for the mentioned crop.
 `;
 
+/**
+ * Generates a vector embedding for the given text using Gemini.
+ * Model: text-embedding-004
+ */
+export const getEmbedding = async (text: string): Promise<number[]> => {
+  try {
+    const response = await ai.models.embedContent({
+      model: "text-embedding-004",
+      contents: {
+        parts: [{ text }]
+      }
+    });
+    return response.embeddings?.[0]?.values || [];
+  } catch (error) {
+    console.error("Embedding Error:", error);
+    return [];
+  }
+};
+
 export const analyzeFertilizerNeeds = async (
   areaHa: number, 
   crop: string, 
@@ -23,8 +41,8 @@ export const analyzeFertilizerNeeds = async (
 ): Promise<any> => {
   const model = "gemini-2.5-flash";
   
-  // 1. QUERY RAG SYSTEM for Fertilizer Specifications
-  const ragContext = KnowledgeBase.search(fertilizerInput);
+  // 1. QUERY RAG SYSTEM for Fertilizer Specifications (Async Semantic Search)
+  const ragContext = await KnowledgeBase.search(fertilizerInput);
 
   const prompt = `
     Field Area: ${areaHa} hectares.
@@ -89,8 +107,8 @@ export const analyzeSeedingNeeds = async (
 ): Promise<any> => {
   const model = "gemini-2.5-flash";
 
-  // 1. QUERY RAG SYSTEM (Agent Agronomist) with REAL DATA
-  const ragContext = KnowledgeBase.search(crop);
+  // 1. QUERY RAG SYSTEM (Agent Agronomist) with REAL DATA via Vector Search
+  const ragContext = await KnowledgeBase.search(crop);
 
   // 2. CONSTRUCT PROMPT with RAG Context
   const prompt = `
@@ -210,7 +228,7 @@ export const sendChatMessage = async (
   }
 
   // Also allow Agent 2 to use RAG for general questions
-  const ragContext = KnowledgeBase.search(message);
+  const ragContext = await KnowledgeBase.search(message);
   fullPrompt += `
   \n=== RAG KNOWLEDGE BASE (REAL AGRONOMIC DATA) ===
   ${ragContext}

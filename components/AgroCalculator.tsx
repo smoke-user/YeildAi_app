@@ -13,8 +13,9 @@ interface AgroCalculatorProps {
 
 // Technical Console Logger Component
 const AIConsoleLog = ({ loading, restored, activeTab, inputs }: { loading: boolean; restored: boolean; activeTab: 'SEEDS' | 'CHEMICALS', inputs: any }) => {
-  const [logs, setLogs] = useState<{ts: string, type: 'INFO' | 'PROMPT' | 'NET' | 'JSON' | 'SUCCESS' | 'HISTORY' | 'RAG', msg: string}[]>([]);
+  const [logs, setLogs] = useState<{ts: string, type: 'INFO' | 'PROMPT' | 'NET' | 'JSON' | 'SUCCESS' | 'HISTORY' | 'RAG' | 'EMBED', msg: string}[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const timeoutsRef = useRef<NodeJS.Timeout[]>([]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -22,31 +23,38 @@ const AIConsoleLog = ({ loading, restored, activeTab, inputs }: { loading: boole
     }
   }, [logs]);
 
+  // Handle Restoration Logs
   useEffect(() => {
     if (restored) {
         setLogs(prev => {
-            // Avoid duplicate restore logs
-            if (prev.some(l => l.type === 'HISTORY')) return prev;
+            // Check if we just added history logs to prevent duplication on re-renders
+            const lastLog = prev[prev.length - 1];
+            if (lastLog && lastLog.type === 'SUCCESS' && lastLog.msg.includes('Historical')) return prev;
+
+            const separator = prev.length > 0 ? [{ ts: '---', type: 'INFO' as const, msg: '------------------------------------------' }] : [];
+
             return [
+                ...prev,
+                ...separator,
                 { ts: '0ms', type: 'HISTORY', msg: 'DB: Connected to IndexedDB...' },
                 { ts: '+15ms', type: 'HISTORY', msg: 'DB: Plans retrieved successfully.' },
                 { ts: '+30ms', type: 'INFO', msg: `Restored Context: Crop="${inputs.crop}" | Soil=${inputs.soil}` },
                 { ts: '+45ms', type: 'SUCCESS', msg: 'Historical Data Loaded. Ready.' },
             ];
         });
-    } else if (!loading) {
-        if (inputs.fieldId === 'UNKNOWN' || inputs.fieldId === '') {
-             setLogs([]);
-        }
     }
-  }, [restored, inputs.fieldId]);
+  }, [restored]); // Depend only on restored flag
 
+  // Handle Loading Logs (Simulation)
   useEffect(() => {
     if (loading) {
-      setLogs([]);
+      // Clear timeouts from any previous run to avoid overlapping logs from a cancelled/restarted action
+      timeoutsRef.current.forEach(clearTimeout);
+      timeoutsRef.current = [];
+
       const startTime = Date.now();
       
-      const addLog = (type: 'INFO' | 'PROMPT' | 'NET' | 'JSON' | 'SUCCESS' | 'RAG', msg: string) => {
+      const addLog = (type: 'INFO' | 'PROMPT' | 'NET' | 'JSON' | 'SUCCESS' | 'RAG' | 'EMBED', msg: string) => {
         setLogs(prev => [...prev, {
           ts: `+${Date.now() - startTime}ms`,
           type,
@@ -54,27 +62,44 @@ const AIConsoleLog = ({ loading, restored, activeTab, inputs }: { loading: boole
         }]);
       };
 
+      // Add Separator for new calculation
+      setLogs(prev => {
+          const separator = prev.length > 0 ? [{ ts: '---', type: 'INFO' as const, msg: '------------------------------------------' }] : [];
+          return [...prev, ...separator];
+      });
+
       addLog('INFO', `Initializing ${activeTab === 'SEEDS' ? 'Agent 1 (Planning)' : 'Agent 2 (Chemistry)'}...`);
 
       const queryItem = activeTab === 'SEEDS' ? inputs.crop : inputs.chemical;
 
       const sequence = [
-        { t: 200, type: 'INFO' as const, msg: `Context: Area=${inputs.area}ha | Query="${queryItem}" | Soil=${inputs.soil}` },
-        { t: 400, type: 'RAG' as const, msg: `Querying Agronomist Knowledge Base for "${queryItem}"...` },
-        { t: 600, type: 'RAG' as const, msg: `Retrieving verified agronomic norms...` },
-        { t: 800, type: 'RAG' as const, msg: `[RAG MATCH] Found specifications in Knowledge Graph` },
-        { t: 1000, type: 'PROMPT' as const, msg: 'Constructing System Prompt with RAG Context...' },
+        { t: 100, type: 'INFO' as const, msg: `Context: Area=${inputs.area}ha | Query="${queryItem}" | Soil=${inputs.soil}` },
+        { t: 300, type: 'EMBED' as const, msg: `Generating Vector Embedding (text-embedding-004)...` },
+        { t: 600, type: 'EMBED' as const, msg: `Vector: [0.012, -0.45, 0.22, ...]` },
+        { t: 800, type: 'RAG' as const, msg: `Calculating Cosine Similarity against Knowledge Graph...` },
+        { t: 1000, type: 'RAG' as const, msg: `[RAG MATCH] Found specifications in Knowledge Graph (Score: 0.92)` },
+        { t: 1200, type: 'PROMPT' as const, msg: 'Constructing System Prompt with RAG Context...' },
         { t: 1500, type: 'NET' as const, msg: 'POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent' },
-        { t: 2500, type: 'NET' as const, msg: 'Response received: 200 OK | Latency: 1000ms' },
-        { t: 2800, type: 'JSON' as const, msg: 'Parsing structured output...' },
-        { t: 3000, type: 'JSON' as const, msg: `{ "result": "...", "source": "KnowledgeBase" }` },
-        { t: 3200, type: 'SUCCESS' as const, msg: 'Data validated. Rendering UI.' },
+        { t: 2000, type: 'NET' as const, msg: 'Response received: 200 OK | Latency: 500ms' },
+        { t: 2200, type: 'JSON' as const, msg: 'Parsing structured output...' },
+        { t: 2500, type: 'SUCCESS' as const, msg: 'Data validated. Rendering UI.' },
       ];
 
-      const timeouts = sequence.map(s => setTimeout(() => addLog(s.type, s.msg), s.t));
-      return () => timeouts.forEach(clearTimeout);
+      sequence.forEach(s => {
+          const id = setTimeout(() => addLog(s.type, s.msg), s.t);
+          timeoutsRef.current.push(id);
+      });
     }
-  }, [loading, activeTab, inputs]);
+    // Note: We DO NOT clear timeouts when loading becomes false. 
+    // This ensures the visual trace finishes even if the API call is faster than the simulation.
+  }, [loading]);
+
+  // Cleanup on unmount only
+  useEffect(() => {
+      return () => {
+          timeoutsRef.current.forEach(clearTimeout);
+      };
+  }, []);
 
   if (!loading && logs.length === 0) {
     return (
@@ -107,6 +132,7 @@ const AIConsoleLog = ({ loading, restored, activeTab, inputs }: { loading: boole
                 {log.type === 'INFO' && <span className="text-blue-400 font-bold">[INFO]</span>}
                 {log.type === 'PROMPT' && <span className="text-purple-400 font-bold">[PROMPT]</span>}
                 {log.type === 'RAG' && <span className="text-pink-400 font-bold">[RAG]</span>}
+                {log.type === 'EMBED' && <span className="text-indigo-400 font-bold">[EMBED]</span>}
                 {log.type === 'NET' && <span className="text-yellow-400 font-bold">[NET]</span>}
                 {log.type === 'JSON' && <span className="text-orange-400 font-bold">[JSON]</span>}
                 {log.type === 'SUCCESS' && <span className="text-green-500 font-bold">[DONE]</span>}
@@ -116,6 +142,7 @@ const AIConsoleLog = ({ loading, restored, activeTab, inputs }: { loading: boole
                   log.type === 'JSON' ? 'text-orange-200' :
                   log.type === 'SUCCESS' ? 'text-green-400' : 
                   log.type === 'RAG' ? 'text-pink-200' :
+                  log.type === 'EMBED' ? 'text-indigo-200' :
                   log.type === 'HISTORY' ? 'text-cyan-100' : 'text-slate-300'
                 }`}>
                   {log.msg}

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, Map, Calculator, Settings, MessageSquareText } from 'lucide-react';
+import { LayoutDashboard, Map, Calculator, Settings, MessageSquareText, Book } from 'lucide-react';
 import { ViewState } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -16,13 +16,14 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({ currentView,
     { id: 'DASHBOARD', label: t.nav.dashboard, icon: <LayoutDashboard size={24} /> },
     { id: 'MAPPING', label: t.nav.mapping, icon: <Map size={24} /> },
     { id: 'CALCULATOR', label: t.nav.calculator, icon: <Calculator size={24} /> },
-    { id: 'AI_CHAT', label: "AI Chat", icon: <MessageSquareText size={24} /> },
+    { id: 'AI_CHAT', label: "Chat", icon: <MessageSquareText size={24} /> },
+    { id: 'KNOWLEDGE_BASE', label: "RAG", icon: <Book size={24} /> },
     { id: 'DRONE_CONTROL', label: t.nav.drone, icon: <Settings size={24} /> },
   ];
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-dark-card border-t border-slate-200 dark:border-dark-border px-2 pb-safe pt-2 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
-      <div className="flex justify-around items-end h-16 pb-2">
+    <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-dark-card border-t border-slate-200 dark:border-dark-border px-2 pb-safe pt-2 z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] overflow-x-auto">
+      <div className="flex justify-between items-end h-16 pb-2 min-w-max px-2 gap-4">
         {navItems.map((item) => (
           <button
             key={item.id}

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, Map, Calculator, Settings, MessageSquareText } from 'lucide-react';
+import { LayoutDashboard, Map, Calculator, Settings, MessageSquareText, Presentation, Book } from 'lucide-react';
 import { ViewState } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -46,6 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
     { id: 'MAPPING', label: t.nav.mapping, icon: <Map size={20} /> },
     { id: 'CALCULATOR', label: t.nav.calculator, icon: <Calculator size={20} /> },
     { id: 'AI_CHAT', label: t.nav.chat, icon: <MessageSquareText size={20} /> },
+    { id: 'KNOWLEDGE_BASE', label: "Knowledge Base", icon: <Book size={20} /> },
     { id: 'DRONE_CONTROL', label: t.nav.drone, icon: <Settings size={20} /> },
   ];
 
@@ -77,7 +78,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
         ))}
       </nav>
 
-      <div className="p-4 border-t border-yield-900/50">
+      <div className="p-4 border-t border-yield-900/50 space-y-4">
+        <button 
+           onClick={() => setView('PRESENTATION')}
+           className="w-full bg-gradient-to-r from-purple-900 to-blue-900 hover:from-purple-800 hover:to-blue-800 text-white p-3 rounded-xl flex items-center justify-center gap-2 text-sm font-bold shadow-lg border border-white/10 transition-all"
+        >
+           <Presentation size={18} /> Pitch Deck
+        </button>
+
         <div className="bg-yield-900/50 rounded-xl p-4 border border-yield-800/30">
           <div className="flex items-center space-x-2 text-sm text-green-400">
             <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>

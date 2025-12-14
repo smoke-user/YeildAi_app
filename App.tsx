@@ -5,7 +5,9 @@ import { FieldMapping } from './components/FieldMapping';
 import { AgroCalculator } from './components/AgroCalculator';
 import { DroneConnection } from './components/DroneConnection';
 import { AIChat } from './components/AIChat';
+import { KnowledgeManager } from './components/KnowledgeManager'; // NEW
 import { MobileNavigation } from './components/MobileNavigation';
+import { PresentationMode } from './components/PresentationMode';
 import { ViewState, Field } from './types';
 import { Map, TrendingUp, Calendar, AlertTriangle, Globe, Moon, Sun, Trash2, FileText, Download, CheckCircle, Database } from 'lucide-react';
 import { useLanguage } from './contexts/LanguageContext';
@@ -281,6 +283,11 @@ const App: React.FC = () => {
       );
   }
 
+  // Intercept Presentation View
+  if (currentView === 'PRESENTATION') {
+     return <PresentationMode onClose={() => setView('DASHBOARD')} />;
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-yield-50 dark:bg-dark-bg font-sans transition-colors duration-300">
       <Sidebar currentView={currentView} setView={setView} />
@@ -299,6 +306,7 @@ const App: React.FC = () => {
                   {currentView === 'CALCULATOR' && t.nav.calculator}
                   {currentView === 'DRONE_CONTROL' && t.nav.drone}
                   {currentView === 'AI_CHAT' && t.nav.chat}
+                  {currentView === 'KNOWLEDGE_BASE' && "Knowledge Base"}
                 </h2>
                 <p className="text-yield-600 dark:text-gray-400 text-sm md:text-base">{t.dashboard.subtitle}</p>
               </div>
@@ -356,6 +364,10 @@ const App: React.FC = () => {
 
           {currentView === 'AI_CHAT' && (
             <AIChat fields={fields} />
+          )}
+
+          {currentView === 'KNOWLEDGE_BASE' && (
+            <KnowledgeManager />
           )}
         </div>
         
